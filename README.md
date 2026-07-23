@@ -29,7 +29,7 @@ B = 6 × N × V2 / V1
 
 ## 使用
 
-直接访问 GitHub Pages 地址，或下载仓库后双击 `index.html`。所有实验数据仅保存在当前设备、当前浏览器中；程序不连接数据库，也不上传实验数据。
+直接访问 [GitHub Pages 网页](https://frank0cea.github.io/ozone-lab-assistant/)，或下载仓库后双击 `index.html`。所有实验数据仅保存在当前设备、当前浏览器中；程序不连接数据库，也不上传实验数据。
 
 ## 验证
 
