@@ -86,7 +86,7 @@ footer { display: flex; justify-content: center; gap: 12px; padding: 22px 24px 3
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 
 @media (max-width: 850px) {
-  .topbar { grid-template-columns: 1fr auto; padding: 11px 16px; }.privacy-chip { display: none; }.tabs { grid-column: 1 / -1; width: 100%; }.tabs button { flex: 1; }
+  .topbar { grid-template-columns: 1fr auto; gap: 9px 14px; padding: 11px 16px; }.privacy-chip { grid-column: 1 / -1; justify-self: start; }.tabs { grid-column: 1 / -1; width: 100%; }.tabs button { flex: 1; }
   main { width: min(100% - 22px, 720px); }.page { padding-top: 15px; }.hero { min-height: auto; display: block; padding: 26px 23px; }.formula-card { margin-top: 20px; min-width: 0; }
   .field-grid.three { grid-template-columns: 1fr 1fr; }.field-grid.three label:first-child { grid-column: 1 / -1; }
   .timer-layout { grid-template-columns: 150px 1fr; }.timer-ring { width: 140px; height: 140px; }.timer-ring time { font-size: 27px; }
