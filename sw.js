@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "ozone-lab-assistant-v3";
+const CACHE_NAME = "ozone-lab-assistant-v3.1";
 const APP_SHELL = [
   "./",
   "./index.html",
