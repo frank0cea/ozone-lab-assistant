@@ -2,296 +2,173 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0d6b61">
-  <title>OzoneLab · 臭氧实验助手</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#123f3b">
+  <title>硫代硫酸钠标定助手</title>
   <link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar" aria-label="主导航">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">O₃</div>
-        <div><strong>OzoneLab</strong><span>实验计算与流程助手</span></div>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">滴</span>
+      <div><strong>硫代硫酸钠标定助手</strong><small>重铬酸钾法 · 本机记录</small></div>
+    </div>
+    <nav class="tabs" aria-label="页面导航">
+      <button class="active" data-page="current">本次标定</button>
+      <button data-page="history">历史记录 <span id="historyCount">0</span></button>
+    </nav>
+    <div class="privacy-chip"><i></i>数据仅保存在本设备</div>
+  </header>
+
+  <main>
+    <section class="page active" id="current">
+      <div class="hero">
+        <div>
+          <p class="eyebrow">Na₂S₂O₃ STANDARDIZATION</p>
+          <h1>把计时、读数和计算放在同一页</h1>
+          <p>按重铬酸钾法记录两组平行滴定。程序自动计算消耗体积、实际浓度、平均值和2%平行误差。</p>
+        </div>
+        <div class="formula-card">
+          <span>计算公式</span>
+          <strong>B = 6NV₂ / V₁</strong>
+          <small>V₁ = 终点读数 − 初始读数</small>
+        </div>
       </div>
 
-      <nav class="nav-list">
-        <button class="nav-item active" data-section-target="overview"><span>⌂</span>实验台</button>
-        <button class="nav-item" data-section-target="calculators"><span>∑</span>计算中心</button>
-        <button class="nav-item" data-section-target="workflow"><span>✓</span>实验流程</button>
-        <button class="nav-item" data-section-target="records"><span>▤</span>实验记录</button>
-      </nav>
+      <form id="standardizationForm" novalidate>
+        <section class="card setup-card">
+          <div class="section-heading">
+            <span class="step-number">01</span>
+            <div><h2>标定信息</h2><p>未完成的输入会自动保存在当前设备</p></div>
+          </div>
+          <div class="field-grid three">
+            <label>标定日期与时间<input type="datetime-local" name="experimentAt" required></label>
+            <label>硫代硫酸钠批次<input type="text" name="thioBatch" placeholder="如 Na2S2O3-0723" required></label>
+            <label>重铬酸钾批次<input type="text" name="dichromateBatch" placeholder="可选"></label>
+          </div>
+          <div class="field-grid three">
+            <label>重铬酸钾浓度 N（mol/L）<input type="number" name="dichromateConcentration" value="0.01667" min="0" step="0.00001" required></label>
+            <label>重铬酸钾体积 V₂（mL）<input type="number" name="dichromateVolume" value="20.00" min="0" step="0.01" required></label>
+            <label>预计 Na₂S₂O₃ 浓度（mol/L）<input type="number" name="nominalConcentration" value="0.1000" min="0" step="0.0001"><small>仅用于预估滴定体积</small></label>
+          </div>
+          <div class="expected-strip" id="expectedStrip">
+            <span>预计消耗体积</span><strong id="expectedVolume">20.004 mL</strong><small id="expectedHint">适合使用50 mL滴定管</small>
+          </div>
+        </section>
 
-      <div class="sidebar-note">
-        <span class="status-dot"></span>
-        <div><strong>数据仅保存在本机</strong><small>记录不会自动上传</small></div>
+        <section class="card timer-card">
+          <div class="section-heading">
+            <span class="step-number">02</span>
+            <div><h2>避光稳定</h2><p>加入KI并密封后开始计时</p></div>
+          </div>
+          <div class="timer-layout">
+            <div class="timer-ring" id="darkTimerRing">
+              <time id="darkTimerDisplay">06:00</time>
+              <span id="darkTimerStatus">尚未开始</span>
+            </div>
+            <div class="timer-control">
+              <label>计时时长（min）<input type="number" id="darkMinutes" name="darkMinutes" value="6" min="0.1" step="0.1"></label>
+              <div class="button-row">
+                <button type="button" class="button primary" id="startDarkTimer">开始计时</button>
+                <button type="button" class="button secondary" id="pauseDarkTimer" disabled>暂停</button>
+                <button type="button" class="button text" id="resetDarkTimer">重置</button>
+              </div>
+              <p class="method-note"><strong>国标步骤：</strong>密封后在黑暗中稳定6 min，再加入淀粉指示剂并开始滴定。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card samples-card">
+          <div class="section-heading">
+            <span class="step-number">03</span>
+            <div><h2>平行滴定</h2><p>分别记录滴定管初始和终点读数</p></div>
+          </div>
+
+          <div class="sample-grid">
+            <article class="sample" data-sample="0">
+              <div class="sample-title"><div><span>平行样</span><strong>01</strong></div><span class="sample-status" id="sampleStatus0">待录入</span></div>
+              <div class="field-grid two">
+                <label>初始读数（mL）<input type="number" name="sample1Initial" min="0" step="0.01" placeholder="0.00" inputmode="decimal"></label>
+                <label>终点读数（mL）<input type="number" name="sample1Final" min="0" step="0.01" placeholder="0.00" inputmode="decimal"></label>
+              </div>
+              <div class="sample-result">
+                <div><span>消耗体积 V₁</span><strong id="consumed0">—</strong></div>
+                <div><span>实际浓度 B</span><strong id="concentration0">—</strong></div>
+              </div>
+              <div class="endpoint-box" id="endpointBox0">
+                <div><span>终点30 s确认</span><strong id="endpointDisplay0">未开始</strong></div>
+                <button type="button" class="button endpoint" data-start-endpoint="0">蓝色消失，开始30 s</button>
+                <div class="endpoint-confirm" id="endpointConfirm0">
+                  <button type="button" data-confirm-endpoint="0" data-passed="true">30 s未返蓝</button>
+                  <button type="button" data-confirm-endpoint="0" data-passed="false">返蓝，继续滴定</button>
+                </div>
+              </div>
+            </article>
+
+            <article class="sample" data-sample="1">
+              <div class="sample-title"><div><span>平行样</span><strong>02</strong></div><span class="sample-status" id="sampleStatus1">待录入</span></div>
+              <div class="field-grid two">
+                <label>初始读数（mL）<input type="number" name="sample2Initial" min="0" step="0.01" placeholder="0.00" inputmode="decimal"></label>
+                <label>终点读数（mL）<input type="number" name="sample2Final" min="0" step="0.01" placeholder="0.00" inputmode="decimal"></label>
+              </div>
+              <div class="sample-result">
+                <div><span>消耗体积 V₁</span><strong id="consumed1">—</strong></div>
+                <div><span>实际浓度 B</span><strong id="concentration1">—</strong></div>
+              </div>
+              <div class="endpoint-box" id="endpointBox1">
+                <div><span>终点30 s确认</span><strong id="endpointDisplay1">未开始</strong></div>
+                <button type="button" class="button endpoint" data-start-endpoint="1">蓝色消失，开始30 s</button>
+                <div class="endpoint-confirm" id="endpointConfirm1">
+                  <button type="button" data-confirm-endpoint="1" data-passed="true">30 s未返蓝</button>
+                  <button type="button" data-confirm-endpoint="1" data-passed="false">返蓝，继续滴定</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="summary-card" id="summaryCard">
+          <div class="summary-icon">∴</div>
+          <div class="summary-copy"><span>平行结果</span><h2 id="summaryTitle">等待两组滴定数据</h2><p id="summaryText">录入两组初始和终点读数后自动计算。</p></div>
+          <div class="summary-metrics">
+            <div><span>平均浓度</span><strong id="meanConcentration">—</strong></div>
+            <div><span>相对差</span><strong id="relativeDifference">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card save-card">
+          <label>备注<textarea name="notes" rows="3" placeholder="记录终点颜色、异常操作或需要复核的情况"></textarea></label>
+          <div class="save-actions">
+            <p>即使结果不合格也可以保存，历史记录会保留原始读数和判定状态。</p>
+            <button type="button" class="button secondary" id="calculateButton">重新计算</button>
+            <button type="submit" class="button primary large">保存本次标定</button>
+          </div>
+        </section>
+      </form>
+    </section>
+
+    <section class="page" id="history">
+      <div class="history-header">
+        <div><p class="eyebrow">LOCAL HISTORY</p><h1>标定历史记录</h1><p>记录只存在当前设备的当前浏览器中。</p></div>
+        <div class="history-actions">
+          <button class="button secondary" id="exportCsv">导出CSV</button>
+          <button class="button secondary" id="exportJson">备份JSON</button>
+          <label class="button secondary file-button">导入JSON<input type="file" id="importJson" accept="application/json"></label>
+        </div>
       </div>
-    </aside>
+      <div class="history-stats">
+        <div><span>记录总数</span><strong id="recordTotal">0</strong></div>
+        <div><span>合格记录</span><strong id="passedTotal">0</strong></div>
+        <div><span>最近标定浓度</span><strong id="latestConcentration">—</strong></div>
+      </div>
+      <div class="history-list" id="historyList"></div>
+      <div class="empty-state" id="historyEmpty"><span>空</span><h2>还没有历史记录</h2><p>完成第一组标定后，结果会显示在这里。</p><button class="button primary" data-page="current">开始第一次标定</button></div>
+    </section>
+  </main>
 
-    <main class="main-content">
-      <header class="topbar">
-        <button class="mobile-menu" id="mobileMenu" aria-label="打开菜单">☰</button>
-        <div><p class="eyebrow">臭氧预处理 · Ca²⁺/Mg²⁺ · 超滤</p><h1 id="pageTitle">实验台</h1></div>
-        <div class="top-actions">
-          <span class="date-chip" id="todayText"></span>
-          <button class="button ghost" data-go="records">＋ 新记录</button>
-        </div>
-      </header>
-
-      <section class="page-section active" id="overview">
-        <div class="hero-card">
-          <div>
-            <span class="hero-label">第一版 · 本地运行</span>
-            <h2>把容易算错的部分交给程序</h2>
-            <p>统一单位、保留计算快照、按顺序推进实验，并在体积、剂量或步骤异常时提醒。</p>
-            <div class="hero-actions">
-              <button class="button primary" data-go="calculators">开始计算</button>
-              <button class="button secondary" data-go="workflow">进入实验流程</button>
-            </div>
-          </div>
-          <div class="molecule" aria-hidden="true">
-            <div class="bubble b1">O</div><div class="bond"></div><div class="bubble b2">O</div><div class="bond bond-2"></div><div class="bubble b3">O</div>
-          </div>
-        </div>
-
-        <div class="stat-grid">
-          <article class="stat-card"><span>当前流程</span><strong id="statProgress">0%</strong><small id="statProgressLabel">尚未开始</small></article>
-          <article class="stat-card"><span>本机记录</span><strong id="statRecords">0</strong><small>可导出 CSV / JSON</small></article>
-          <article class="stat-card"><span>最近计算</span><strong id="statCalculations">0</strong><small>自动写入记录快照</small></article>
-        </div>
-
-        <div class="content-grid dashboard-grid">
-          <article class="panel">
-            <div class="panel-heading"><div><span class="section-kicker">快捷入口</span><h3>常用计算</h3></div></div>
-            <div class="quick-grid">
-              <button data-open-calc="ion"><span class="quick-icon aqua">Ca</span><div><strong>离子投加</strong><small>Ca²⁺ / Mg²⁺ 储备液</small></div><b>→</b></button>
-              <button data-open-calc="direct"><span class="quick-icon blue">O₃</span><div><strong>曝气时间</strong><small>按 DOC 剂量换算</small></div><b>→</b></button>
-              <button data-open-calc="iodometric"><span class="quick-icon amber">KI</span><div><strong>转移剂量</strong><small>两级 KI 滴定</small></div><b>→</b></button>
-              <button data-open-calc="membrane"><span class="quick-icon violet">J</span><div><strong>膜通量</strong><small>J、J/J₀ 与 FRR</small></div><b>→</b></button>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-heading"><div><span class="section-kicker">最近保存</span><h3>实验记录</h3></div><button class="text-button" data-go="records">查看全部</button></div>
-            <div id="recentRecords" class="empty-state compact"><span>▤</span><p>还没有实验记录</p></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="page-section" id="calculators">
-        <div class="section-intro">
-          <div><p>所有结果均保留原始输入和单位；点击“保存本次结果”后会进入实验记录快照。</p></div>
-          <span class="info-chip">默认 DOC 10 mg/L · 水样 500 mL</span>
-        </div>
-
-        <div class="calculator-grid">
-          <article class="calc-card" id="calc-dilution">
-            <div class="calc-head"><span class="calc-number">01</span><div><h3>通用稀释</h3><p>C₁V₁ = C₂V₂</p></div></div>
-            <form data-calculator="dilution">
-              <div class="field-row">
-                <label>储备液浓度<input name="stock" type="number" min="0" step="any" value="250" required><small>与目标浓度单位相同</small></label>
-                <label>目标浓度<input name="target" type="number" min="0" step="any" value="10" required></label>
-              </div>
-              <label>最终体积（mL）<input name="volume" type="number" min="0" step="any" value="500" required></label>
-              <button class="button primary full" type="submit">计算取液体积</button>
-            </form>
-            <div class="result-box" data-result="dilution"><p>填写参数后计算</p></div>
-          </article>
-
-          <article class="calc-card" id="calc-ion">
-            <div class="calc-head"><span class="calc-number">02</span><div><h3>Ca²⁺ / Mg²⁺ 投加</h3><p>由离子储备液配制工作液</p></div></div>
-            <form data-calculator="ion">
-              <div class="field-row">
-                <label>目标离子浓度（mmol/L）<input name="target" type="number" min="0" step="any" value="10" required></label>
-                <label>储备液浓度（mol/L）<input name="stock" type="number" min="0" step="any" value="1" required></label>
-              </div>
-              <label>最终体积（mL）<input name="volume" type="number" min="0" step="any" value="500" required></label>
-              <button class="button primary full" type="submit">计算离子投加量</button>
-            </form>
-            <div class="result-box" data-result="ion"><p>填写参数后计算</p></div>
-          </article>
-
-          <article class="calc-card" id="calc-stock">
-            <div class="calc-head"><span class="calc-number">03</span><div><h3>摩尔储备液配制</h3><p>按纯度修正试剂称量</p></div></div>
-            <form data-calculator="stock">
-              <div class="field-row">
-                <label>目标浓度（mol/L）<input name="molarity" type="number" min="0" step="any" value="1" required></label>
-                <label>定容体积（mL）<input name="volume" type="number" min="0" step="any" value="100" required></label>
-              </div>
-              <div class="field-row">
-                <label>相对分子质量（g/mol）<input name="mw" type="number" min="0" step="any" placeholder="如 147.02" required></label>
-                <label>试剂纯度（%）<input name="purity" type="number" min="0" max="100" step="any" value="100" required></label>
-              </div>
-              <button class="button primary full" type="submit">计算称量质量</button>
-            </form>
-            <div class="result-box" data-result="stock"><p>填写参数后计算</p></div>
-          </article>
-
-          <article class="calc-card featured" id="calc-direct">
-            <div class="calc-head"><span class="calc-number">04</span><div><h3>直接曝气臭氧</h3><p>以目标转移剂量反算曝气时间</p></div></div>
-            <form data-calculator="direct">
-              <div class="field-row three">
-                <label>DOC（mg/L）<input name="doc" type="number" min="0" step="any" value="10" required></label>
-                <label>水样体积（L）<input name="volume" type="number" min="0" step="any" value="0.5" required></label>
-                <label>目标剂量（mg O₃/mg DOC）<input name="dose" type="number" min="0" step="any" value="0.5" required></label>
-              </div>
-              <div class="field-row">
-                <label>发生器实测产量（mg/min）<input name="output" type="number" min="0" step="any" placeholder="请填标定值" required></label>
-                <label>预计转移效率（%）<input name="efficiency" type="number" min="0" max="100" step="any" value="100" required><small>无可靠数据时先填 100%</small></label>
-              </div>
-              <button class="button primary full" type="submit">计算曝气时间</button>
-            </form>
-            <div class="result-box" data-result="direct"><p>需要先填写发生器实测产量</p></div>
-          </article>
-
-          <article class="calc-card featured" id="calc-water">
-            <div class="calc-head"><span class="calc-number">05</span><div><h3>臭氧水投加</h3><p>按最终总体积反算，自动显示稀释占比</p></div></div>
-            <form data-calculator="water">
-              <div class="field-row three">
-                <label>DOC（mg/L）<input name="doc" type="number" min="0" step="any" value="10" required></label>
-                <label>最终体积（mL）<input name="volume" type="number" min="0" step="any" value="500" required></label>
-                <label>目标剂量（mg O₃/mg DOC）<input name="dose" type="number" min="0" step="any" value="0.5" required></label>
-              </div>
-              <div class="field-row">
-                <label>臭氧水实测浓度（mg/L）<input name="concentration" type="number" min="0" step="any" value="25" required></label>
-                <label>转移/保留率（%）<input name="retention" type="number" min="0" max="100" step="any" value="100" required></label>
-              </div>
-              <button class="button primary full" type="submit">计算臭氧水体积</button>
-            </form>
-            <div class="result-box" data-result="water"><p>填写参数后计算</p></div>
-          </article>
-
-          <article class="calc-card featured" id="calc-iodometric">
-            <div class="calc-head"><span class="calc-number">06</span><div><h3>KI 尾气与转移剂量</h3><p>两级吸收瓶，空白分别扣除</p></div></div>
-            <form data-calculator="iodometric">
-              <div class="field-row three">
-                <label>Na₂S₂O₃（mol/L）<input name="thio" type="number" min="0" step="any" value="0.01" required></label>
-                <label>KI 瓶 1（mL）<input name="v1" type="number" min="0" step="any" required></label>
-                <label>KI 瓶 2（mL）<input name="v2" type="number" min="0" step="any" required></label>
-              </div>
-              <div class="field-row three">
-                <label>空白 V₀（mL）<input name="blank" type="number" min="0" step="any" value="0" required></label>
-                <label>发生器产量（mg/min）<input name="output" type="number" min="0" step="any" required></label>
-                <label>曝气时间（min）<input name="time" type="number" min="0" step="any" required></label>
-              </div>
-              <div class="field-row">
-                <label>DOC（mg/L）<input name="doc" type="number" min="0" step="any" value="10" required></label>
-                <label>水样体积（L）<input name="volume" type="number" min="0" step="any" value="0.5" required></label>
-              </div>
-              <button class="button primary full" type="submit">计算实际转移剂量</button>
-            </form>
-            <div class="result-box" data-result="iodometric"><p>录入三组滴定体积后计算</p></div>
-          </article>
-
-          <article class="calc-card wide" id="calc-membrane">
-            <div class="calc-head"><span class="calc-number">07</span><div><h3>膜通量、归一化通量与 FRR</h3><p>J = ΔV / (A·Δt)，体积按 mL、面积按 cm² 输入</p></div></div>
-            <form data-calculator="membrane">
-              <div class="field-row four">
-                <label>产水体积（mL）<input name="permeate" type="number" min="0" step="any" required></label>
-                <label>收集时间（min）<input name="time" type="number" min="0" step="any" required></label>
-                <label>有效膜面积（cm²）<input name="area" type="number" min="0" step="any" required></label>
-                <label>或有效直径（mm）<input name="diameter" type="number" min="0" step="any" placeholder="自动换算面积"></label>
-              </div>
-              <div class="field-row">
-                <label>初始纯水通量 J₀（L·m⁻²·h⁻¹）<input name="j0" type="number" min="0" step="any" placeholder="可选"></label>
-                <label>恢复纯水通量 Jr（L·m⁻²·h⁻¹）<input name="jr" type="number" min="0" step="any" placeholder="计算 FRR 时填写"></label>
-              </div>
-              <button class="button primary full" type="submit">计算膜性能指标</button>
-            </form>
-            <div class="result-box" data-result="membrane"><p>填写产水体积、时间和有效面积</p></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="page-section" id="workflow">
-        <div class="workflow-toolbar panel">
-          <div><span class="section-kicker">流程模板</span><h3>选择臭氧处理路线</h3></div>
-          <div class="segmented" role="group" aria-label="臭氧路线">
-            <button class="active" data-route="direct">直接曝气</button>
-            <button data-route="water">臭氧水</button>
-          </div>
-          <label class="toggle"><input type="checkbox" id="allowSkip"><span></span>允许跳过未完成步骤</label>
-          <button class="button danger-ghost" id="resetWorkflow">重置流程</button>
-        </div>
-
-        <div class="timer-panel" id="timerPanel">
-          <div><span>当前计时</span><strong id="timerStep">尚未启动</strong></div>
-          <time id="timerDisplay">00:00</time>
-          <div class="timer-actions"><button id="pauseTimer">暂停</button><button id="cancelTimer">取消</button></div>
-        </div>
-
-        <div class="workflow-layout">
-          <article class="panel workflow-main">
-            <div class="panel-heading">
-              <div><span class="section-kicker">按顺序执行</span><h3 id="workflowTitle">直接曝气实验流程</h3></div>
-              <div class="progress-label"><strong id="workflowPercent">0%</strong><span><i id="workflowBar"></i></span></div>
-            </div>
-            <div class="workflow-list" id="workflowList"></div>
-          </article>
-          <aside class="panel safety-panel">
-            <span class="safety-icon">!</span>
-            <h3>开始前确认</h3>
-            <ul>
-              <li>臭氧尾气破坏装置已连接</li>
-              <li>防倒吸空瓶和两级 KI 瓶已检查</li>
-              <li>实验区域通风，无人员暴露风险</li>
-              <li>臭氧发生器产量使用当天或近期标定值</li>
-              <li>残余臭氧未去除前不进入膜过滤</li>
-            </ul>
-            <p>程序只负责流程提醒，不能替代现场安全规程和仪器说明书。</p>
-          </aside>
-        </div>
-      </section>
-
-      <section class="page-section" id="records">
-        <div class="records-layout">
-          <article class="panel record-form-panel">
-            <div class="panel-heading"><div><span class="section-kicker">本机保存</span><h3>新增实验记录</h3></div></div>
-            <form id="recordForm">
-              <div class="field-row">
-                <label>实验编号<input name="experimentId" type="text" required></label>
-                <label>日期<input name="date" type="date" required></label>
-              </div>
-              <div class="field-row three">
-                <label>污染物<select name="pollutant"><option>SA</option><option>BSA</option><option>其他</option></select></label>
-                <label>处理路线<select name="route"><option value="direct">直接曝气</option><option value="water">臭氧水</option><option value="control">无臭氧对照</option></select></label>
-                <label>平行编号<input name="replicate" type="number" min="1" value="1"></label>
-              </div>
-              <div class="field-row four">
-                <label>DOC（mg/L）<input name="doc" type="number" min="0" step="any" value="10"></label>
-                <label>总体积（mL）<input name="volume" type="number" min="0" step="any" value="500"></label>
-                <label>离子<select name="ion"><option value="none">无</option><option>Ca²⁺</option><option>Mg²⁺</option><option>Ca²⁺+Mg²⁺</option></select></label>
-                <label>离子浓度（mmol/L）<input name="ionConcentration" type="number" min="0" step="any" value="0"></label>
-              </div>
-              <div class="field-row">
-                <label>臭氧剂量（mg O₃/mg DOC）<input name="ozoneDose" type="number" min="0" step="any" value="0.5"></label>
-                <label>状态<select name="status"><option>计划中</option><option>进行中</option><option>已完成</option><option>作废</option></select></label>
-              </div>
-              <label>备注<textarea name="notes" rows="4" placeholder="记录偏差、取样时间、异常现象等"></textarea></label>
-              <label class="checkbox-line"><input type="checkbox" name="includeSnapshot" checked>附上当前计算结果与流程进度快照</label>
-              <button class="button primary full" type="submit">保存实验记录</button>
-            </form>
-          </article>
-
-          <article class="panel records-panel">
-            <div class="panel-heading">
-              <div><span class="section-kicker">记录管理</span><h3>已保存实验</h3></div>
-              <div class="export-actions"><button class="button ghost small" id="exportCsv">导出 CSV</button><button class="button ghost small" id="exportJson">备份 JSON</button><label class="button ghost small file-button">导入 JSON<input id="importJson" type="file" accept="application/json"></label></div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>实验编号</th><th>条件</th><th>臭氧</th><th>状态</th><th>日期</th><th></th></tr></thead>
-                <tbody id="recordsBody"></tbody>
-              </table>
-              <div class="empty-state" id="recordsEmpty"><span>▤</span><p>暂无记录。完成一组参数后从左侧保存。</p></div>
-            </div>
-          </article>
-        </div>
-      </section>
-    </main>
-  </div>
-
+  <footer><strong>隐私说明</strong><span>程序不连接数据库、不包含统计脚本，也不会上传任何实验数据。清除浏览器网站数据会同时删除本机记录，请定期导出JSON备份。</span></footer>
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
   <script src="src/calculations.js" defer></script>
   <script src="src/app.js" defer></script>
 </body>
