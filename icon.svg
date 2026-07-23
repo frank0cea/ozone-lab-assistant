@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="硫代硫酸钠标定助手">
+  <rect width="512" height="512" rx="112" fill="#123f3b"/>
+  <path d="M256 88c-55 80-121 157-121 238 0 67 54 121 121 121s121-54 121-121c0-81-66-158-121-238Z" fill="#e7b65e"/>
+  <path d="M197 335c14 33 40 49 78 48" fill="none" stroke="#fff7e8" stroke-linecap="round" stroke-width="28"/>
+  <circle cx="215" cy="280" r="18" fill="#fff7e8"/>
+</svg>
