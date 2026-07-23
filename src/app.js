@@ -1,64 +1,21 @@
 (function () {
   "use strict";
 
-  const calc = window.LabCalc;
+  const calc = window.TitrationCalc;
   const KEYS = {
-    results: "ozonelab.latestResults.v1",
-    records: "ozonelab.records.v1",
-    workflow: "ozonelab.workflow.v1",
-    route: "ozonelab.route.v1",
-    timer: "ozonelab.timer.v1",
+    records: "titration.standardization.records.v1",
+    draft: "titration.standardization.draft.v1",
+    darkTimer: "titration.standardization.darkTimer.v1",
+    endpointTimers: "titration.standardization.endpointTimers.v1",
   };
-  const pageTitles = { overview: "实验台", calculators: "计算中心", workflow: "实验流程", records: "实验记录" };
 
-  let latestResults = readJson(KEYS.results, {});
+  const form = document.getElementById("standardizationForm");
   let records = readJson(KEYS.records, []);
-  let route = localStorage.getItem(KEYS.route) || "direct";
-  let workflowState = readJson(KEYS.workflow, { direct: {}, water: {} });
-  let activeTimer = readJson(KEYS.timer, null);
-  let timerInterval = null;
-
-  const workflows = {
-    direct: [
-      ["完成安全与通风检查", "确认尾气破坏、防倒吸及个体防护", 0],
-      ["准备并编号全部容器", "水样、取样瓶、KI 1/2、空白及膜片", 0],
-      ["确认发生器实测产量", "使用当天或近期、同流量条件下的标定值", 0],
-      ["配制 SA 工作液", "按最终 DOC 和总体积配制", 0],
-      ["加入 Ca²⁺/Mg²⁺ 并混合", "记录储备液体积、离子浓度和混合时间", 5],
-      ["连接两级 KI 尾气吸收瓶", "检查气密性与气路方向", 0],
-      ["直接曝气臭氧", "使用计算中心给出的时间；开始即计时", 0],
-      ["测定处理后残余臭氧", "按固定取样时刻立即测定", 0],
-      ["N₂ 吹脱残余臭氧", "吹脱条件对所有组保持一致", 30],
-      ["确认残余臭氧接近 0", "未确认前不进行膜过滤", 0],
-      ["记录并统一 pH、温度和剩余体积", "pH 目标按最终实验方案执行", 0],
-      ["0.15 MPa 预压新膜", "达到稳定标准后进入下一步", 30],
-      ["0.10 MPa 测定 J₀", "记录稳定纯水通量", 0],
-      ["0.10 MPa 过滤污染液", "各组统一过滤时间或产水终点", 120],
-      ["统一水洗膜片", "相同水量、温度和振荡条件", 2],
-      ["0.10 MPa 测定 Jr", "计算 FRR 并保存膜片", 0],
-      ["完成滴定、记录与样品归档", "保存原始数据和偏差说明", 0],
-    ],
-    water: [
-      ["完成安全与通风检查", "确认尾气破坏、防倒吸及个体防护", 0],
-      ["准备并编号全部容器", "水样、取样瓶、靛蓝试剂及膜片", 0],
-      ["配制基础 SA 溶液", "使用计算中心给出的投加前 DOC 修正值", 0],
-      ["加入 Ca²⁺/Mg²⁺ 并混合", "记录储备液体积、离子浓度和混合时间", 5],
-      ["现制臭氧水", "记录制备起止时刻、温度及气体条件", 0],
-      ["靛蓝法测臭氧水浓度", "取样后立即显色并测定", 0],
-      ["计算并量取臭氧水", "按最终总体积与 DOC 剂量修正", 0],
-      ["加入臭氧水、密闭避光反应", "加完立即盖好并开始计时", 30],
-      ["测定处理后残余臭氧", "按固定取样时刻立即测定", 0],
-      ["N₂ 吹脱残余臭氧", "吹脱条件对所有组保持一致", 30],
-      ["确认残余臭氧接近 0", "未确认前不进行膜过滤", 0],
-      ["记录并统一 pH、温度和剩余体积", "各组取样体积保持一致", 0],
-      ["0.15 MPa 预压新膜", "达到稳定标准后进入下一步", 30],
-      ["0.10 MPa 测定 J₀", "记录稳定纯水通量", 0],
-      ["0.10 MPa 过滤污染液", "各组统一过滤时间或产水终点", 120],
-      ["统一水洗膜片", "相同水量、温度和振荡条件", 2],
-      ["0.10 MPa 测定 Jr", "计算 FRR 并保存膜片", 0],
-      ["完成记录与样品归档", "保存原始数据和偏差说明", 0],
-    ],
-  };
+  let darkTimer = readJson(KEYS.darkTimer, null);
+  let endpointTimers = readJson(KEYS.endpointTimers, [null, null]);
+  let sampleResults = [null, null];
+  let parallelResult = null;
+  let clockInterval = null;
 
   function readJson(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -66,7 +23,6 @@
 
   function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
   function byId(id) { return document.getElementById(id); }
-  function formValues(form) { return Object.fromEntries(new FormData(form).entries()); }
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -74,25 +30,15 @@
     })[char]);
   }
 
-  function format(value, digits = 3) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return "—";
-    if (n === 0) return "0";
-    const precision = Math.abs(n) >= 100 ? 2 : Math.abs(n) < 1 ? Math.max(digits, 4) : digits;
-    return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: precision }).format(n);
+  function number(value) { return value === "" || value === null || value === undefined ? null : Number(value); }
+  function format(value, digits = 5) {
+    if (!Number.isFinite(Number(value))) return "—";
+    return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(Number(value));
   }
 
-  function localDateString(date = new Date()) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  function completionTime(value) {
-    if (typeof value !== "string") return "";
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "" : ` · 完成于 ${date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
+  function localDateTimeValue(date = new Date()) {
+    const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return shifted.toISOString().slice(0, 16);
   }
 
   function toast(message, type = "") {
@@ -103,338 +49,422 @@
     setTimeout(() => element.remove(), 3600);
   }
 
-  function navigate(sectionId) {
-    document.querySelectorAll(".page-section").forEach((section) => section.classList.toggle("active", section.id === sectionId));
-    document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.sectionTarget === sectionId));
-    byId("pageTitle").textContent = pageTitles[sectionId];
-    document.querySelector(".sidebar").classList.remove("open");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function resultHtml(items, warning) {
-    const cells = items.map(([label, value]) => `<div class="result-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
-    return `<div class="result-grid">${cells}${warning ? `<p class="result-warning">${escapeHtml(warning)}</p>` : ""}</div>`;
-  }
-
-  function storeResult(type, label, inputs, result) {
-    latestResults[type] = { type, label, inputs, result, at: new Date().toISOString() };
-    saveJson(KEYS.results, latestResults);
-    refreshDashboard();
-  }
-
-  function showCalculation(form, type, label, runner, presenter) {
-    const resultElement = document.querySelector(`[data-result="${type}"]`);
-    try {
-      const inputs = formValues(form);
-      const result = runner(inputs);
-      const presented = presenter(result, inputs);
-      resultElement.classList.remove("error");
-      resultElement.innerHTML = resultHtml(presented.items, presented.warning);
-      storeResult(type, label, inputs, result);
-      toast(`${label}已更新`, "success");
-    } catch (error) {
-      resultElement.classList.add("error");
-      resultElement.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
-      toast(error.message, "error");
-    }
-  }
-
-  const calculatorHandlers = {
-    dilution(form) {
-      showCalculation(form, "dilution", "通用稀释", (i) => calc.dilution({
-        stockConcentration: i.stock, targetConcentration: i.target, finalVolumeMl: i.volume,
-      }), (r) => ({
-        items: [["取储备液", `${format(r.stockVolumeMl)} mL`], ["理论溶剂体积", `${format(r.solventVolumeMl)} mL`], ["稀释倍数", `${format(r.dilutionFactor)} 倍`]],
-        warning: r.stockVolumeMl < 0.1 ? "取液体积小于 0.1 mL，建议改用更稀的中间液。" : "请以最终定容为准，不要把“补水体积”直接当作容量瓶刻度。",
-      }));
-    },
-    ion(form) {
-      showCalculation(form, "ion", "离子投加", (i) => calc.ionDose({
-        targetMmolL: i.target, stockMolL: i.stock, finalVolumeMl: i.volume,
-      }), (r) => ({
-        items: [["离子储备液", `${format(r.stockVolumeMl)} mL`], ["其余基液体积", `${format(r.baseSolutionVolumeMl)} mL`], ["离子物质的量", `${format(r.ionAmountMmol)} mmol`]],
-        warning: r.stockVolumeMl < 0.1 ? "移取量过小，配制中间储备液可降低移液误差。" : "储备液属于最终总体积的一部分，加入前需预留相应体积。",
-      }));
-    },
-    stock(form) {
-      showCalculation(form, "stock", "摩尔储备液", (i) => calc.stockPreparation({
-        molarityMolL: i.molarity, volumeMl: i.volume, molecularWeightGmol: i.mw, purityPercent: i.purity,
-      }), (r) => ({ items: [["需要称量", `${format(r.massG, 4)} g`], ["物质的量", `${format(r.substanceAmountMol, 5)} mol`]], warning: "确认相对分子质量对应实际水合形态，并按容量瓶最终定容。" }));
-    },
-    direct(form) {
-      showCalculation(form, "direct", "直接曝气臭氧", (i) => calc.directOzone({
-        targetDoseMgMgDoc: i.dose, docMgL: i.doc, sampleVolumeL: i.volume,
-        ozoneOutputMgMin: i.output, transferEfficiencyPercent: i.efficiency,
-      }), (r, i) => {
-        const short = r.timeMin < 0.5;
-        const assumed = Number(i.efficiency) === 100;
-        return {
-          items: [["DOC 总量", `${format(r.docMassMg)} mg`], ["目标转移 O₃", `${format(r.targetOzoneMassMg)} mg`], ["需要曝气", `${format(r.timeMin)} min（${format(r.timeMin * 60, 1)} s）`], ["发生器输入 O₃", `${format(r.inputOzoneMassMg)} mg`]],
-          warning: short ? "计算时间短于 30 s，阀门响应与气路滞后可能造成明显误差。" : assumed ? "当前按 100% 转移估算；完成 KI 尾气滴定后，应以实际转移剂量复核。" : "时间已按所填转移效率反算，请用 KI 尾气结果复核。",
-        };
-      });
-    },
-    water(form) {
-      showCalculation(form, "water", "臭氧水投加", (i) => calc.ozoneWaterDose({
-        targetDoseMgMgDoc: i.dose, docMgL: i.doc, finalVolumeMl: i.volume,
-        ozoneWaterConcentrationMgL: i.concentration, retentionPercent: i.retention,
-      }), (r) => ({
-        items: [["量取臭氧水", `${format(r.ozoneWaterVolumeMl)} mL`], ["基础污染液体积", `${format(r.baseSolutionVolumeMl)} mL`], ["投加前基础液 DOC", `${format(r.requiredBaseDocMgL)} mg/L`], ["臭氧水占总体积", `${format(r.ozoneWaterFractionPercent)}%`], ["目标 O₃ 质量", `${format(r.targetOzoneMassMg)} mg`]],
-        warning: r.ozoneWaterFractionPercent > 10 ? "臭氧水占比超过 10%，必须按上面的“投加前基础液 DOC”配制，否则最终 DOC 会被明显稀释。" : "臭氧水也计入最终总体积；投加后最终 DOC 才是目标 DOC。",
-      }));
-    },
-    iodometric(form) {
-      showCalculation(form, "iodometric", "KI 转移剂量", (i) => calc.iodometricTransfer({
-        thiosulfateMolL: i.thio, bottle1Ml: i.v1, bottle2Ml: i.v2, blankMl: i.blank,
-        ozoneOutputMgMin: i.output, ozoneTimeMin: i.time, docMgL: i.doc, sampleVolumeL: i.volume,
-      }), (r, i) => {
-        const secondShare = (Number(i.v2) - Number(i.blank)) / r.correctedVolumeMl;
-        return {
-          items: [["尾气 O₃", `${format(r.tailOzoneMassMg)} mg`], ["输入 O₃", `${format(r.inputOzoneMassMg)} mg`], ["表观转移 O₃", `${format(r.transferredOzoneMassMg)} mg`], ["转移效率", `${format(r.transferEfficiencyPercent)}%`], ["表观投加剂量 Dapp", `${format(r.apparentDoseMgMgDoc, 4)} mg/mg DOC`], ["实际转移剂量 Dtransfer", `${format(r.transferredDoseMgMgDoc, 4)} mg/mg DOC`]],
-          warning: secondShare > 0.1 ? "第二级 KI 瓶占校正滴定量超过 10%，提示第一级吸收可能接近穿透；请重点检查吸收效率。" : "公式按每个 KI 瓶分别扣除一次空白 V₀。",
-        };
-      });
-    },
-    membrane(form) {
-      showCalculation(form, "membrane", "膜性能指标", (i) => {
-        let area = i.area;
-        if (i.diameter) {
-          area = calc.circularAreaCm2(i.diameter);
-          form.elements.area.value = area.toFixed(4);
-        }
-        return calc.membraneMetrics({ permeateVolumeMl: i.permeate, collectionTimeMin: i.time, areaCm2: area, j0: i.j0, jr: i.jr });
-      }, (r) => {
-        const items = [["瞬时通量 J", `${format(r.fluxLmh)} L·m⁻²·h⁻¹`]];
-        if (r.normalizedFlux !== undefined) items.push(["归一化通量 J/J₀", format(r.normalizedFlux, 4)]);
-        if (r.frrPercent !== undefined) items.push(["通量恢复率 FRR", `${format(r.frrPercent)}%`]);
-        return { items, warning: "不同组必须使用相同有效膜面积和一致的时间/产水终点。" };
-      });
-    },
-  };
-
-  function routeState() {
-    workflowState[route] ||= {};
-    workflowState[route].steps ||= {};
-    workflowState[route].durations ||= {};
-    return workflowState[route];
-  }
-
-  function workflowDuration(index, fallback) {
-    const state = routeState();
-    if (state.durations[index] !== undefined) return state.durations[index];
-    if (route === "direct" && index === 6 && latestResults.direct?.result?.timeMin) return Number(latestResults.direct.result.timeMin.toFixed(2));
-    return fallback;
-  }
-
-  function renderWorkflow() {
-    const state = routeState();
-    byId("workflowTitle").textContent = route === "direct" ? "直接曝气实验流程" : "臭氧水实验流程";
-    document.querySelectorAll("[data-route]").forEach((button) => button.classList.toggle("active", button.dataset.route === route));
-    byId("recordForm").elements.route.value = route;
-    byId("workflowList").innerHTML = workflows[route].map((step, index) => {
-      const done = Boolean(state.steps[index]);
-      const duration = workflowDuration(index, step[2]);
-      const timerActive = activeTimer && activeTimer.route === route && activeTimer.index === index;
-      return `<div class="workflow-step ${done ? "done" : ""} ${timerActive ? "active-timer" : ""}" data-index="${index}">
-        <input class="step-check" type="checkbox" aria-label="完成步骤 ${index + 1}" ${done ? "checked" : ""}>
-        <div class="step-copy"><strong>${index + 1}. ${escapeHtml(step[0])}</strong><small>${escapeHtml(step[1])}${escapeHtml(completionTime(state.steps[index]))}</small></div>
-        <label class="step-duration"><input type="number" min="0" step="0.1" value="${escapeHtml(duration)}" aria-label="计时分钟"><span>min</span></label>
-        <button class="timer-start" ${duration <= 0 ? "disabled" : ""}>开始计时</button>
-      </div>`;
-    }).join("");
-
-    byId("workflowList").querySelectorAll(".workflow-step").forEach((row) => {
-      const index = Number(row.dataset.index);
-      row.querySelector(".step-check").addEventListener("change", (event) => toggleStep(index, event.target));
-      row.querySelector(".step-duration input").addEventListener("change", (event) => {
-        const value = Math.max(0, Number(event.target.value) || 0);
-        routeState().durations[index] = value;
-        saveJson(KEYS.workflow, workflowState);
-        row.querySelector(".timer-start").disabled = value <= 0;
-      });
-      row.querySelector(".timer-start").addEventListener("click", () => startTimer(index, Number(row.querySelector(".step-duration input").value)));
-    });
-    updateProgress();
-  }
-
-  function toggleStep(index, checkbox) {
-    const state = routeState();
-    if (checkbox.checked && !byId("allowSkip").checked) {
-      const unfinished = workflows[route].slice(0, index).findIndex((_, i) => !state.steps[i]);
-      if (unfinished !== -1) {
-        checkbox.checked = false;
-        toast(`请先完成第 ${unfinished + 1} 步，或开启“允许跳过”`, "error");
-        return;
-      }
-    }
-    state.steps[index] = checkbox.checked ? new Date().toISOString() : false;
-    saveJson(KEYS.workflow, workflowState);
-    renderWorkflow();
-    refreshDashboard();
-  }
-
-  function updateProgress() {
-    const done = Object.values(routeState().steps).filter(Boolean).length;
-    const total = workflows[route].length;
-    const percent = Math.round((done / total) * 100);
-    byId("workflowPercent").textContent = `${percent}%`;
-    byId("workflowBar").style.width = `${percent}%`;
-  }
-
-  function startTimer(index, minutes) {
-    if (!Number.isFinite(minutes) || minutes <= 0) return toast("请先填写大于 0 的计时时长", "error");
-    activeTimer = { route, index, label: workflows[route][index][0], remainingMs: minutes * 60 * 1000, running: true, endAt: Date.now() + minutes * 60 * 1000 };
-    saveJson(KEYS.timer, activeTimer);
-    startTimerLoop();
-    renderWorkflow();
-    toast(`已开始：${activeTimer.label}`);
-  }
-
-  function remainingMs() {
-    if (!activeTimer) return 0;
-    return activeTimer.running ? Math.max(0, activeTimer.endAt - Date.now()) : Math.max(0, activeTimer.remainingMs);
-  }
-
-  function startTimerLoop() {
-    clearInterval(timerInterval);
-    if (!activeTimer) return renderTimer();
-    renderTimer();
-    timerInterval = setInterval(() => {
-      renderTimer();
-      if (activeTimer && activeTimer.running && remainingMs() <= 0) finishTimer();
-    }, 500);
-  }
-
-  function renderTimer() {
-    const panel = byId("timerPanel");
-    if (!activeTimer) {
-      panel.classList.remove("active");
-      return;
-    }
-    panel.classList.add("active");
-    byId("timerStep").textContent = activeTimer.label;
-    const seconds = Math.ceil(remainingMs() / 1000);
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    byId("timerDisplay").textContent = `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-    byId("pauseTimer").textContent = activeTimer.running ? "暂停" : "继续";
-  }
-
-  function toggleTimerPause() {
-    if (!activeTimer) return;
-    if (activeTimer.running) {
-      activeTimer.remainingMs = remainingMs();
-      activeTimer.running = false;
-    } else {
-      activeTimer.running = true;
-      activeTimer.endAt = Date.now() + activeTimer.remainingMs;
-    }
-    saveJson(KEYS.timer, activeTimer);
-    renderTimer();
-  }
-
-  function cancelTimer() {
-    activeTimer = null;
-    localStorage.removeItem(KEYS.timer);
-    clearInterval(timerInterval);
-    renderTimer();
-    renderWorkflow();
-  }
-
-  function finishTimer() {
-    const label = activeTimer.label;
-    activeTimer.running = false;
-    activeTimer.remainingMs = 0;
-    saveJson(KEYS.timer, activeTimer);
-    beep();
-    toast(`${label}：计时结束，请立即确认取样或进入下一步`, "success");
-    renderTimer();
-  }
-
   function beep() {
     try {
       const context = new (window.AudioContext || window.webkitAudioContext)();
-      [0, .22, .44].forEach((delay) => {
+      [0, .2, .4].forEach((delay) => {
         const oscillator = context.createOscillator();
         const gain = context.createGain();
         oscillator.connect(gain); gain.connect(context.destination);
         oscillator.frequency.value = 880;
         gain.gain.setValueAtTime(.08, context.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + delay + .16);
-        oscillator.start(context.currentTime + delay); oscillator.stop(context.currentTime + delay + .17);
+        gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + delay + .15);
+        oscillator.start(context.currentTime + delay);
+        oscillator.stop(context.currentTime + delay + .16);
       });
-    } catch { /* Audio is optional. */ }
+    } catch { /* Sound is optional. */ }
   }
 
-  function workflowSnapshot() {
-    const state = routeState();
-    const completed = Object.values(state.steps).filter(Boolean).length;
-    return { route, completed, total: workflows[route].length, steps: { ...state.steps } };
+  function navigate(pageId) {
+    document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === pageId));
+    document.querySelectorAll("[data-page]").forEach((button) => button.classList.toggle("active", button.dataset.page === pageId));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function newExperimentId() {
-    const date = new Date();
-    const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-    const count = records.filter((record) => String(record.experimentId).startsWith(stamp)).length + 1;
-    return `${stamp}-SA-${String(count).padStart(2, "0")}`;
+  function draftFields() {
+    return ["experimentAt", "thioBatch", "dichromateBatch", "dichromateConcentration", "dichromateVolume", "nominalConcentration", "darkMinutes", "sample1Initial", "sample1Final", "sample2Initial", "sample2Final", "notes"];
   }
 
-  function resetRecordForm() {
-    const form = byId("recordForm");
-    form.reset();
-    form.elements.experimentId.value = newExperimentId();
-    form.elements.date.value = localDateString();
-    form.elements.route.value = route;
-    form.elements.doc.value = 10;
-    form.elements.volume.value = 500;
-    form.elements.ozoneDose.value = .5;
-    form.elements.includeSnapshot.checked = true;
+  function saveDraft() {
+    const draft = {};
+    draftFields().forEach((name) => {
+      const field = form.elements[name];
+      if (field) draft[name] = field.value;
+    });
+    saveJson(KEYS.draft, draft);
+  }
+
+  function restoreDraft() {
+    const draft = readJson(KEYS.draft, {});
+    draftFields().forEach((name) => {
+      const field = form.elements[name];
+      if (field && draft[name] !== undefined) field.value = draft[name];
+    });
+    if (!form.elements.experimentAt.value) form.elements.experimentAt.value = localDateTimeValue();
+    if (!form.elements.thioBatch.value) {
+      const date = new Date();
+      form.elements.thioBatch.value = `Na2S2O3-${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+    }
+  }
+
+  function updateExpectedVolume() {
+    const strip = byId("expectedStrip");
+    try {
+      const result = calc.expectedTitrantVolume({
+        dichromateConcentrationMolL: form.elements.dichromateConcentration.value,
+        dichromateVolumeMl: form.elements.dichromateVolume.value,
+        nominalTitrantConcentrationMolL: form.elements.nominalConcentration.value,
+      });
+      byId("expectedVolume").textContent = `${format(result.expectedVolumeMl, 3)} mL`;
+      strip.classList.toggle("warning", result.expectedVolumeMl > 50 || result.expectedVolumeMl < 1);
+      byId("expectedHint").textContent = result.expectedVolumeMl > 50
+        ? "预计超过50 mL，一次滴定管量程可能不足"
+        : result.expectedVolumeMl < 1
+          ? "预计体积小于1 mL，滴定误差可能较大"
+          : "适合使用50 mL滴定管";
+    } catch {
+      byId("expectedVolume").textContent = "—";
+      byId("expectedHint").textContent = "请检查输入参数";
+      strip.classList.add("warning");
+    }
+  }
+
+  function sampleFieldNames(index) {
+    const number = index + 1;
+    return { initial: `sample${number}Initial`, final: `sample${number}Final` };
+  }
+
+  function calculateSample(index, showError = false) {
+    const names = sampleFieldNames(index);
+    const initial = form.elements[names.initial].value;
+    const final = form.elements[names.final].value;
+    const card = document.querySelector(`[data-sample="${index}"]`);
+    card.classList.remove("valid", "invalid");
+
+    if (initial === "" && final === "") {
+      sampleResults[index] = null;
+      byId(`consumed${index}`).textContent = "—";
+      byId(`concentration${index}`).textContent = "—";
+      byId(`sampleStatus${index}`).textContent = "待录入";
+      renderEndpoint(index);
+      return null;
+    }
+    if (initial === "" || final === "") {
+      sampleResults[index] = null;
+      card.classList.add("invalid");
+      byId(`sampleStatus${index}`).textContent = "数据不完整";
+      byId(`consumed${index}`).textContent = "—";
+      byId(`concentration${index}`).textContent = "—";
+      renderEndpoint(index);
+      return null;
+    }
+
+    try {
+      const result = calc.calculateStandardization({
+        dichromateConcentrationMolL: form.elements.dichromateConcentration.value,
+        dichromateVolumeMl: form.elements.dichromateVolume.value,
+        initialReadingMl: initial,
+        finalReadingMl: final,
+      });
+      sampleResults[index] = result;
+      card.classList.add("valid");
+      byId(`consumed${index}`).textContent = `${format(result.consumedVolumeMl, 3)} mL`;
+      byId(`concentration${index}`).textContent = `${format(result.titrantConcentrationMolL, 6)} mol/L`;
+      byId(`sampleStatus${index}`).textContent = "已计算";
+      renderEndpoint(index);
+      return result;
+    } catch (error) {
+      sampleResults[index] = null;
+      card.classList.add("invalid");
+      byId(`sampleStatus${index}`).textContent = "读数有误";
+      byId(`consumed${index}`).textContent = "—";
+      byId(`concentration${index}`).textContent = "—";
+      renderEndpoint(index);
+      if (showError) toast(`平行样${index + 1}：${error.message}`, "error");
+      return null;
+    }
+  }
+
+  function calculateAll(showError = false) {
+    calculateSample(0, showError);
+    calculateSample(1, showError);
+    const card = byId("summaryCard");
+    card.classList.remove("passed", "failed");
+    parallelResult = null;
+
+    if (!sampleResults[0] || !sampleResults[1]) {
+      byId("summaryTitle").textContent = "等待两组滴定数据";
+      byId("summaryText").textContent = "录入两组初始和终点读数后自动计算。";
+      byId("meanConcentration").textContent = "—";
+      byId("relativeDifference").textContent = "—";
+      return false;
+    }
+
+    parallelResult = calc.evaluateParallels(sampleResults.map((item) => item.titrantConcentrationMolL));
+    card.classList.add(parallelResult.passed ? "passed" : "failed");
+    byId("summaryTitle").textContent = parallelResult.passed ? "平行结果合格" : "平行差超过2%";
+    byId("summaryText").textContent = parallelResult.passed
+      ? "两组结果满足要求，平均浓度可作为推荐记录值。"
+      : "请保留原始数据并检查滴定终点、读数或重新进行标定。";
+    byId("meanConcentration").textContent = `${format(parallelResult.meanConcentrationMolL, 6)} mol/L`;
+    byId("relativeDifference").textContent = `${format(parallelResult.relativeDifferencePercent, 3)}%`;
+    return true;
+  }
+
+  function timerRemaining(timer) {
+    if (!timer) return 0;
+    return timer.running ? Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000)) : Math.max(0, timer.remainingSec || 0);
+  }
+
+  function formatClock(seconds) {
+    const safe = Math.max(0, Math.ceil(seconds));
+    return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+  }
+
+  function renderDarkTimer() {
+    const ring = byId("darkTimerRing");
+    ring.classList.remove("running", "completed");
+    const defaultSeconds = Math.round((number(byId("darkMinutes").value) || 6) * 60);
+    const remaining = darkTimer ? timerRemaining(darkTimer) : defaultSeconds;
+    byId("darkTimerDisplay").textContent = formatClock(remaining);
+    byId("pauseDarkTimer").disabled = !darkTimer?.running;
+
+    if (!darkTimer) {
+      byId("darkTimerStatus").textContent = "尚未开始";
+      byId("startDarkTimer").textContent = "开始计时";
+    } else if (darkTimer.completed) {
+      ring.classList.add("completed");
+      byId("darkTimerStatus").textContent = "避光稳定已完成";
+      byId("startDarkTimer").textContent = "重新计时";
+    } else if (darkTimer.running) {
+      ring.classList.add("running");
+      byId("darkTimerStatus").textContent = "避光计时中";
+      byId("startDarkTimer").textContent = "计时中";
+    } else {
+      byId("darkTimerStatus").textContent = "已暂停";
+      byId("startDarkTimer").textContent = "继续计时";
+    }
+  }
+
+  function startDarkTimer() {
+    if (darkTimer?.running) return;
+    if (darkTimer && !darkTimer.completed && darkTimer.remainingSec > 0) {
+      darkTimer.running = true;
+      darkTimer.endAt = Date.now() + darkTimer.remainingSec * 1000;
+    } else {
+      const durationSec = Math.round(Number(byId("darkMinutes").value) * 60);
+      if (!Number.isFinite(durationSec) || durationSec <= 0) return toast("避光时长必须大于0", "error");
+      darkTimer = {
+        running: true,
+        completed: false,
+        durationSec,
+        remainingSec: durationSec,
+        startedAt: new Date().toISOString(),
+        endAt: Date.now() + durationSec * 1000,
+      };
+    }
+    saveJson(KEYS.darkTimer, darkTimer);
+    renderDarkTimer();
+  }
+
+  function pauseDarkTimer() {
+    if (!darkTimer?.running) return;
+    darkTimer.remainingSec = timerRemaining(darkTimer);
+    darkTimer.running = false;
+    saveJson(KEYS.darkTimer, darkTimer);
+    renderDarkTimer();
+  }
+
+  function resetDarkTimer(requireConfirmation = true) {
+    if (requireConfirmation && darkTimer && !confirm("确定重置本次避光计时吗？")) return;
+    darkTimer = null;
+    localStorage.removeItem(KEYS.darkTimer);
+    renderDarkTimer();
+  }
+
+  function completeDarkTimer() {
+    if (!darkTimer || darkTimer.completed) return;
+    darkTimer.running = false;
+    darkTimer.completed = true;
+    darkTimer.remainingSec = 0;
+    darkTimer.completedAt = new Date().toISOString();
+    saveJson(KEYS.darkTimer, darkTimer);
+    renderDarkTimer();
+    beep();
+    toast("6分钟避光稳定完成，可以加入淀粉并开始滴定", "success");
+  }
+
+  function startEndpointTimer(index) {
+    if (!sampleResults[index]) return toast(`请先完整录入平行样${index + 1}的滴定读数`, "error");
+    endpointTimers[index] = {
+      running: true,
+      remainingSec: 30,
+      endAt: Date.now() + 30000,
+      status: "running",
+      startedAt: new Date().toISOString(),
+    };
+    saveJson(KEYS.endpointTimers, endpointTimers);
+    renderEndpoint(index);
+  }
+
+  function completeEndpointTimer(index) {
+    const timer = endpointTimers[index];
+    if (!timer || timer.status !== "running") return;
+    timer.running = false;
+    timer.remainingSec = 0;
+    timer.status = "awaiting";
+    timer.timerCompletedAt = new Date().toISOString();
+    saveJson(KEYS.endpointTimers, endpointTimers);
+    renderEndpoint(index);
+    beep();
+    toast(`平行样${index + 1}：30秒已到，请确认是否返蓝`, "success");
+  }
+
+  function confirmEndpoint(index, passed) {
+    const timer = endpointTimers[index] || {};
+    timer.running = false;
+    timer.remainingSec = 0;
+    timer.status = passed ? "confirmed" : "returned";
+    timer.confirmedAt = new Date().toISOString();
+    endpointTimers[index] = timer;
+    saveJson(KEYS.endpointTimers, endpointTimers);
+    renderEndpoint(index);
+    toast(passed ? `平行样${index + 1}终点已确认` : `平行样${index + 1}返蓝，请继续滴定并更新终点读数`, passed ? "success" : "error");
+  }
+
+  function clearEndpoint(index) {
+    endpointTimers[index] = null;
+    saveJson(KEYS.endpointTimers, endpointTimers);
+    renderEndpoint(index);
+  }
+
+  function renderEndpoint(index) {
+    const timer = endpointTimers[index];
+    const box = byId(`endpointBox${index}`);
+    const display = byId(`endpointDisplay${index}`);
+    const start = document.querySelector(`[data-start-endpoint="${index}"]`);
+    const confirmBox = byId(`endpointConfirm${index}`);
+    box.classList.remove("confirmed", "returned");
+    confirmBox.classList.remove("visible");
+    start.disabled = !sampleResults[index];
+
+    if (!timer) {
+      display.textContent = "未开始";
+      start.textContent = "蓝色消失，开始30 s";
+    } else if (timer.status === "running") {
+      display.textContent = formatClock(timerRemaining(timer));
+      start.textContent = "计时中";
+      start.disabled = true;
+    } else if (timer.status === "awaiting") {
+      display.textContent = "请确认是否返蓝";
+      start.textContent = "重新计时";
+      confirmBox.classList.add("visible");
+    } else if (timer.status === "confirmed") {
+      box.classList.add("confirmed");
+      display.textContent = "30 s未返蓝，已确认";
+      start.textContent = "重新计时";
+    } else if (timer.status === "returned") {
+      box.classList.add("returned");
+      display.textContent = "出现返蓝，请继续滴定";
+      start.textContent = "更新读数后重新计时";
+    }
+  }
+
+  function tickClocks() {
+    if (darkTimer?.running && timerRemaining(darkTimer) <= 0) completeDarkTimer();
+    endpointTimers.forEach((timer, index) => {
+      if (timer?.status === "running" && timerRemaining(timer) <= 0) completeEndpointTimer(index);
+    });
+    renderDarkTimer();
+    renderEndpoint(0);
+    renderEndpoint(1);
+  }
+
+  function recordStatus() {
+    if (!parallelResult?.passed) return "平行差超限";
+    if (!darkTimer?.completed || endpointTimers.some((timer) => timer?.status !== "confirmed")) return "步骤待确认";
+    return "合格";
   }
 
   function saveRecord(event) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const values = formValues(form);
+    if (!form.reportValidity()) return;
+    if (!calculateAll(true)) return toast("请先完整录入两组平行滴定数据", "error");
+    const status = recordStatus();
     const record = {
       id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-      ...values,
       createdAt: new Date().toISOString(),
+      experimentAt: form.elements.experimentAt.value,
+      thioBatch: form.elements.thioBatch.value.trim(),
+      dichromateBatch: form.elements.dichromateBatch.value.trim(),
+      dichromateConcentrationMolL: Number(form.elements.dichromateConcentration.value),
+      dichromateVolumeMl: Number(form.elements.dichromateVolume.value),
+      nominalConcentrationMolL: number(form.elements.nominalConcentration.value),
+      darkTimer: darkTimer ? JSON.parse(JSON.stringify(darkTimer)) : null,
+      samples: sampleResults.map((result, index) => ({
+        initialReadingMl: Number(form.elements[sampleFieldNames(index).initial].value),
+        finalReadingMl: Number(form.elements[sampleFieldNames(index).final].value),
+        ...result,
+        endpoint: endpointTimers[index] ? JSON.parse(JSON.stringify(endpointTimers[index])) : null,
+      })),
+      parallel: { ...parallelResult },
+      status,
+      notes: form.elements.notes.value.trim(),
     };
-    if (values.includeSnapshot === "on") {
-      record.snapshot = { calculations: structuredClone(latestResults), workflow: workflowSnapshot() };
-    }
-    delete record.includeSnapshot;
     records.unshift(record);
     saveJson(KEYS.records, records);
-    renderRecords();
-    refreshDashboard();
-    resetRecordForm();
-    toast("实验记录已保存在本机", "success");
+    renderHistory();
+    resetAfterSave();
+    toast(`标定记录已保存在本机：${status}`, status === "合格" ? "success" : "");
   }
 
-  function conditionText(record) {
-    const ion = record.ion && record.ion !== "none" ? `${record.ion} ${record.ionConcentration || 0} mmol/L` : "无二价离子";
-    return `${record.pollutant || "SA"} · ${ion}`;
+  function resetAfterSave() {
+    ["sample1Initial", "sample1Final", "sample2Initial", "sample2Final", "notes"].forEach((name) => { form.elements[name].value = ""; });
+    form.elements.experimentAt.value = localDateTimeValue();
+    resetDarkTimer(false);
+    endpointTimers = [null, null];
+    localStorage.removeItem(KEYS.endpointTimers);
+    sampleResults = [null, null];
+    parallelResult = null;
+    calculateAll(false);
+    saveDraft();
   }
 
-  function routeText(value) { return ({ direct: "直接曝气", water: "臭氧水", control: "无臭氧" })[value] || value; }
+  function statusClass(status) { return status === "合格" ? "" : "review"; }
+  function displayDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+  }
 
-  function renderRecords() {
-    const body = byId("recordsBody");
-    body.innerHTML = records.map((record) => `<tr>
-      <td><strong>${escapeHtml(record.experimentId)}</strong><small>平行 ${escapeHtml(record.replicate || 1)}</small></td>
-      <td><strong>${escapeHtml(conditionText(record))}</strong><small>DOC ${escapeHtml(record.doc)} mg/L · ${escapeHtml(record.volume)} mL</small></td>
-      <td><strong>${escapeHtml(routeText(record.route))}</strong><small>${escapeHtml(record.ozoneDose || 0)} mg/mg DOC</small></td>
-      <td><span class="status-pill">${escapeHtml(record.status)}</span></td>
-      <td>${escapeHtml(record.date)}</td>
-      <td><button class="delete-record" data-delete-record="${escapeHtml(record.id)}" aria-label="删除记录">删除</button></td>
-    </tr>`).join("");
-    byId("recordsEmpty").style.display = records.length ? "none" : "grid";
-    body.querySelectorAll("[data-delete-record]").forEach((button) => button.addEventListener("click", () => {
-      const record = records.find((item) => item.id === button.dataset.deleteRecord);
-      if (!record || !confirm(`确定删除记录“${record.experimentId}”吗？`)) return;
+  function endpointLabel(endpoint) {
+    if (endpoint?.status === "confirmed") return "30 s未返蓝";
+    if (endpoint?.status === "returned") return "曾返蓝，待复核";
+    return "未确认";
+  }
+
+  function renderHistory() {
+    byId("historyCount").textContent = records.length;
+    byId("recordTotal").textContent = records.length;
+    byId("passedTotal").textContent = records.filter((record) => record.status === "合格").length;
+    byId("latestConcentration").textContent = records.length ? `${format(records[0].parallel?.meanConcentrationMolL, 6)} mol/L` : "—";
+    byId("historyEmpty").style.display = records.length ? "none" : "grid";
+    const list = byId("historyList");
+    list.innerHTML = records.map((record) => `<details class="history-item">
+      <summary>
+        <div><span>标定时间</span><strong>${escapeHtml(displayDate(record.experimentAt))}</strong></div>
+        <div><span>Na₂S₂O₃批次</span><strong>${escapeHtml(record.thioBatch)}</strong></div>
+        <div><span>平均浓度</span><strong>${escapeHtml(format(record.parallel?.meanConcentrationMolL, 6))} mol/L</strong></div>
+        <span class="result-badge ${statusClass(record.status)}">${escapeHtml(record.status)}</span>
+      </summary>
+      <div class="history-detail">
+        <div class="detail-grid">
+          <div><span>重铬酸钾</span><strong>${escapeHtml(format(record.dichromateConcentrationMolL, 5))} mol/L × ${escapeHtml(format(record.dichromateVolumeMl, 2))} mL</strong></div>
+          <div><span>平行相对差</span><strong>${escapeHtml(format(record.parallel?.relativeDifferencePercent, 3))}%</strong></div>
+          <div><span>避光计时</span><strong>${record.darkTimer?.completed ? "已完成" : "未确认"}</strong></div>
+          <div><span>重铬酸钾批次</span><strong>${escapeHtml(record.dichromateBatch || "未填写")}</strong></div>
+          ${record.samples.map((sample, index) => `<div><span>平行样${index + 1}读数</span><strong>${escapeHtml(format(sample.initialReadingMl, 2))} → ${escapeHtml(format(sample.finalReadingMl, 2))} mL</strong></div><div><span>平行样${index + 1}结果</span><strong>${escapeHtml(format(sample.titrantConcentrationMolL, 6))} mol/L · ${escapeHtml(endpointLabel(sample.endpoint))}</strong></div>`).join("")}
+        </div>
+        ${record.notes ? `<p class="history-note"><strong>备注：</strong>${escapeHtml(record.notes)}</p>` : ""}
+        <button class="delete-record" data-delete="${escapeHtml(record.id)}">删除这条记录</button>
+      </div>
+    </details>`).join("");
+    list.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      const record = records.find((item) => item.id === button.dataset.delete);
+      if (!record || !confirm(`确定删除 ${record.thioBatch} 的这条标定记录吗？`)) return;
       records = records.filter((item) => item.id !== record.id);
-      saveJson(KEYS.records, records); renderRecords(); refreshDashboard();
+      saveJson(KEYS.records, records);
+      renderHistory();
       toast("记录已删除");
     }));
   }
@@ -442,16 +472,23 @@
   function download(filename, content, type) {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([content], { type }));
-    link.download = filename; link.click();
+    link.download = filename;
+    link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  function localDateString() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
   function csvCell(value) { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
   function exportCsv() {
-    if (!records.length) return toast("还没有可导出的记录", "error");
-    const headers = ["实验编号", "日期", "污染物", "路线", "平行", "DOC_mg_L", "总体积_mL", "离子", "离子浓度_mmol_L", "臭氧剂量_mgO3_mgDOC", "状态", "备注"];
-    const rows = records.map((r) => [r.experimentId, r.date, r.pollutant, routeText(r.route), r.replicate, r.doc, r.volume, r.ion, r.ionConcentration, r.ozoneDose, r.status, r.notes]);
-    download(`ozonelab-records-${localDateString()}.csv`, `\ufeff${[headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")}`, "text/csv;charset=utf-8");
+    if (!records.length) return toast("还没有可导出的历史记录", "error");
+    const header = ["标定时间", "Na2S2O3批次", "K2Cr2O7批次", "K2Cr2O7浓度_mol_L", "K2Cr2O7体积_mL", "平行1初始_mL", "平行1终点_mL", "平行1消耗_mL", "平行1浓度_mol_L", "平行2初始_mL", "平行2终点_mL", "平行2消耗_mL", "平行2浓度_mol_L", "平均浓度_mol_L", "相对差_%", "判定", "备注"];
+    const rows = records.map((record) => [record.experimentAt, record.thioBatch, record.dichromateBatch, record.dichromateConcentrationMolL, record.dichromateVolumeMl, record.samples[0].initialReadingMl, record.samples[0].finalReadingMl, record.samples[0].consumedVolumeMl, record.samples[0].titrantConcentrationMolL, record.samples[1].initialReadingMl, record.samples[1].finalReadingMl, record.samples[1].consumedVolumeMl, record.samples[1].titrantConcentrationMolL, record.parallel.meanConcentrationMolL, record.parallel.relativeDifferencePercent, record.status, record.notes]);
+    const csv = `\ufeff${[header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")}`;
+    download(`Na2S2O3-标定记录-${localDateString()}.csv`, csv, "text/csv;charset=utf-8");
   }
 
   function importJson(file) {
@@ -461,70 +498,60 @@
       try {
         const imported = JSON.parse(reader.result);
         if (!Array.isArray(imported)) throw new Error("备份文件格式不正确");
-        const existing = new Set(records.map((item) => item.id));
-        records = [...imported.filter((item) => item && item.id && !existing.has(item.id)), ...records];
-        saveJson(KEYS.records, records); renderRecords(); refreshDashboard();
-        toast("JSON 备份已合并导入", "success");
+        const ids = new Set(records.map((record) => record.id));
+        const valid = imported.filter((record) => record && record.id && Array.isArray(record.samples) && record.parallel && !ids.has(record.id));
+        records = [...valid, ...records].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        saveJson(KEYS.records, records);
+        renderHistory();
+        toast(`已导入${valid.length}条记录`, "success");
       } catch (error) { toast(error.message, "error"); }
     };
     reader.readAsText(file);
   }
 
-  function refreshDashboard() {
-    const state = routeState();
-    const done = Object.values(state.steps).filter(Boolean).length;
-    const total = workflows[route].length;
-    const percent = Math.round((done / total) * 100);
-    byId("statProgress").textContent = `${percent}%`;
-    byId("statProgressLabel").textContent = percent ? `${done}/${total} 步已完成 · ${routeText(route)}` : "尚未开始";
-    byId("statRecords").textContent = records.length;
-    byId("statCalculations").textContent = Object.keys(latestResults).length;
-
-    const recent = byId("recentRecords");
-    if (!records.length) {
-      recent.className = "empty-state compact";
-      recent.innerHTML = "<span>▤</span><p>还没有实验记录</p>";
-    } else {
-      recent.className = "";
-      recent.innerHTML = records.slice(0, 3).map((record) => `<div class="recent-record"><div><strong>${escapeHtml(record.experimentId)}</strong><small>${escapeHtml(conditionText(record))}</small></div><time>${escapeHtml(record.date)}</time></div>`).join("");
-    }
-  }
-
   function bindEvents() {
-    document.querySelectorAll("[data-section-target]").forEach((button) => button.addEventListener("click", () => navigate(button.dataset.sectionTarget)));
-    document.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => navigate(button.dataset.go)));
-    document.querySelectorAll("[data-open-calc]").forEach((button) => button.addEventListener("click", () => {
-      navigate("calculators");
-      setTimeout(() => byId(`calc-${button.dataset.openCalc}`).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-    }));
-    document.querySelectorAll("form[data-calculator]").forEach((form) => form.addEventListener("submit", (event) => {
-      event.preventDefault(); calculatorHandlers[form.dataset.calculator](form);
-    }));
-    document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => {
-      route = button.dataset.route; localStorage.setItem(KEYS.route, route); renderWorkflow(); refreshDashboard();
-    }));
-    byId("resetWorkflow").addEventListener("click", () => {
-      if (!confirm(`确定重置“${routeText(route)}”的流程进度和自定义时长吗？`)) return;
-      workflowState[route] = {}; saveJson(KEYS.workflow, workflowState);
-      if (activeTimer?.route === route) cancelTimer();
-      renderWorkflow(); refreshDashboard(); toast("流程已重置");
+    document.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => navigate(button.dataset.page)));
+    form.addEventListener("input", (event) => {
+      saveDraft();
+      if (["dichromateConcentration", "dichromateVolume", "nominalConcentration"].includes(event.target.name)) {
+        updateExpectedVolume();
+        calculateAll(false);
+      }
     });
-    byId("pauseTimer").addEventListener("click", toggleTimerPause);
-    byId("cancelTimer").addEventListener("click", cancelTimer);
-    byId("recordForm").addEventListener("submit", saveRecord);
+    [0, 1].forEach((index) => {
+      const names = sampleFieldNames(index);
+      [names.initial, names.final].forEach((name) => form.elements[name].addEventListener("input", () => {
+        if (endpointTimers[index]) clearEndpoint(index);
+        calculateAll(false);
+      }));
+    });
+    form.addEventListener("submit", saveRecord);
+    byId("calculateButton").addEventListener("click", () => calculateAll(true));
+    byId("startDarkTimer").addEventListener("click", startDarkTimer);
+    byId("pauseDarkTimer").addEventListener("click", pauseDarkTimer);
+    byId("resetDarkTimer").addEventListener("click", () => resetDarkTimer(true));
+    document.querySelectorAll("[data-start-endpoint]").forEach((button) => button.addEventListener("click", () => startEndpointTimer(Number(button.dataset.startEndpoint))));
+    document.querySelectorAll("[data-confirm-endpoint]").forEach((button) => button.addEventListener("click", () => confirmEndpoint(Number(button.dataset.confirmEndpoint), button.dataset.passed === "true")));
     byId("exportCsv").addEventListener("click", exportCsv);
     byId("exportJson").addEventListener("click", () => {
-      if (!records.length) return toast("还没有可备份的记录", "error");
-      download(`ozonelab-backup-${localDateString()}.json`, JSON.stringify(records, null, 2), "application/json");
+      if (!records.length) return toast("还没有可备份的历史记录", "error");
+      download(`Na2S2O3-标定备份-${localDateString()}.json`, JSON.stringify(records, null, 2), "application/json");
     });
     byId("importJson").addEventListener("change", (event) => importJson(event.target.files[0]));
-    byId("mobileMenu").addEventListener("click", () => document.querySelector(".sidebar").classList.toggle("open"));
   }
 
   function initialize() {
-    const now = new Date();
-    byId("todayText").textContent = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "short" }).format(now);
-    bindEvents(); resetRecordForm(); renderRecords(); renderWorkflow(); refreshDashboard(); startTimerLoop();
+    if (!Array.isArray(endpointTimers) || endpointTimers.length !== 2) endpointTimers = [null, null];
+    restoreDraft();
+    bindEvents();
+    updateExpectedVolume();
+    calculateAll(false);
+    renderDarkTimer();
+    renderEndpoint(0);
+    renderEndpoint(1);
+    renderHistory();
+    clockInterval = setInterval(tickClocks, 500);
+    tickClocks();
   }
 
   document.addEventListener("DOMContentLoaded", initialize);
