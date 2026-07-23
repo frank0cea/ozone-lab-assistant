@@ -1,8 +1,8 @@
 {
   "name": "ozone-lab-assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "臭氧预处理膜污染实验的本地计算、流程计时与记录助手",
+  "description": "重铬酸钾法标定硫代硫酸钠的本地计时、计算与记录助手",
   "scripts": {
     "test": "node tests/calculations.test.js",
     "check": "node --check src/calculations.js && node --check src/app.js && npm test"
