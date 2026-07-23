@@ -540,6 +540,24 @@
     byId("importJson").addEventListener("change", (event) => importJson(event.target.files[0]));
   }
 
+  function initializeOfflineMode() {
+    const status = byId("offlineStatus");
+    if (!("serviceWorker" in navigator)) {
+      status.textContent = "数据仅本机保存";
+      return;
+    }
+
+    window.addEventListener("load", async () => {
+      try {
+        await navigator.serviceWorker.register("./sw.js");
+        await navigator.serviceWorker.ready;
+        status.textContent = "本机保存 · 已可离线使用";
+      } catch {
+        status.textContent = "数据仅本机保存";
+      }
+    });
+  }
+
   function initialize() {
     if (!Array.isArray(endpointTimers) || endpointTimers.length !== 2) endpointTimers = [null, null];
     restoreDraft();
@@ -550,6 +568,7 @@
     renderEndpoint(0);
     renderEndpoint(1);
     renderHistory();
+    initializeOfflineMode();
     clockInterval = setInterval(tickClocks, 500);
     tickClocks();
   }
